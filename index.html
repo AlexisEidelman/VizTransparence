@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="fr">
+    <head>
+        <meta charset="utf-8">
+        <title>Transparence Santé</title>
+        <script type="text/javascript" src="js/d3.v3.js"></script>
+        <script src="/js/crossfilter.js"></script>
+        <script src="/js/dc.js"></script>
+        <script src="/js/jquery-2.2.3.min.js"></script>
+        <script src="/js/bootstrap.js"></script>
+        <script src="/js/d3.tip.v0.6.3.js"></script>
+
+        <a href="https://github.com/alexiseidelman/VizTransparence">
+            <img style="position: absolute; top: 0; right: 0; border: 0;" src="img/forkme.png"
+            alt="Fork me on GitHub"
+            >
+        </a>
+
+
+        <div class="intro-header">
+            <div class="container">
+                <div class="intro-text">
+        	     <h1>Les avantages procurés aux professionnels de santé par les entreprises </h1>
+        	     <p>Les conventions (dont les données sont aussi accessibles sur data.gouv.fr) ne sont pas prises en compte ici mais elles existent.</p>
+        	     <p>J'ai construit cette visualisation sans être un expert en javascript (et ça se voit). J'ai repris des éléments produit par
+                 <a href="https://github.com/regardscitoyens/sunshine-data">regards citoyens</a> et par
+                 <a href="https://github.com/DPCollins/DCLG_Fire">Daniel Collins</a>. Merci à eux d'avoir
+               ouvert leur code sur Github !
+
+               N'hésitez pas à améliorer le mien. </p>
+                </div>
+            </div>
+        </div>
+
+
+
+
+
+        <div class="row1">
+          <div class="col-md-7" id="carte">
+            <div class="btn-group">
+              <button id="D" type="button" class="btn btn-default">Departement</button>
+              <!-- <button id="C" type="button" class="btn btn-default">Commune</button>
+              <button id="P" type="button" class="btn btn-default">Code Postal</button>
+              <button id="I" type="button" class="btn btn-default">Iris</button> -->
+            </div>
+            <!-- <strong>Borough/Ward Area:</strong> -->
+            <!--         <a class="reset" href="javascript:WardsM.filterAll();dc.renderAll(WardsM);" style="display: none;">reset</a> -->
+            <!-- <a class="reset" href="javascript:WardsM.filterAll();load();" style="display: none;">reset</a>
+            <span class="reset" style="display: none;"> | Filtre actuel: <span class="filter"></span></span>
+            <div class="clearfix"></div> -->
+            <p style="color: #31708f"><strong>Note: </strong>L'intensité de la couleur correspond au montant d'avantages dans la zone</p>
+          </div>
+
+          <div class="col-md-5" id="bars">
+            <div class="dc-data-count" style="float: left;">
+              <h4>
+                <span>
+                  <span class="filter-count"></span>
+                  interventions sélectionnées parmi
+                  <span class="total-count"></span>
+                  |
+                  <!-- 		<a href="javascript:dc.filterAll(); dc.renderAll();">Reset All</a> -->
+                  <a href="javascript:dc.filterAll(); load();">Reset All</a>
+
+                </span>
+              </h4>
+            </div>
+            <!-- 	<a class="reset" href="javascript:dc.filterAll();dc.redrawAll();" style="display: none;">reset</a> ~~> -->
+            <div class="col-md-7" id="Graph_par_jour"></div>
+        </div>
+      </div>
+
+        <!-- <div class="col-md-7" id="Graph_par_semaine">
+        <div class="col-md-7" id="Graph_par_mois"> -->
+          <!-- </div> -->
+
+      <style type="text/css">
+      div.bar {
+        display: inline-block;
+        width: 20px;
+        height: 75px;
+        background-color: teal;
+        margin-right: 2px;
+      }
+      </style>
+
+
+
+      <div class="pie_charts">
+        <div class="container2">
+          <div class="text_graphs">
+            <p> Note : il reste du travail pour que ces éléments soient encore plus pertinent.
+                Par exemple, les noms de sociétés sont parfois écrit différemments et apparaissent donc sous deux formes dans le graphique ci-dessus.
+            </p>
+          </div>
+
+
+
+          </div>
+        <div id="pie-categ"></div>
+        <div id="pie-chart"></div>
+      </div>
+
+
+    </head>
+
+    <link rel="stylesheet" href="css/dc.css" media="screen" />
+    <link rel="stylesheet" href="css/bootstrap.css" media="screen" />
+
+    <body>
+
+      <script type="text/javascript">
+        function print_filter(filter){
+        	var f=eval(filter);
+        	if (typeof(f.length) != "undefined") {}else{}
+        	if (typeof(f.top) != "undefined") {f=f.top(Infinity);}else{}
+        	if (typeof(f.dimension) != "undefined") {f=f.dimension(function(d) { return "";}).top(Infinity);}else{}
+        	console.log(filter+"("+f.length+") = "+JSON.stringify(f).replace("[","[\n\t").replace(/}\,/g,"},\n\t").replace("]","\n]"));
+        }
+
+
+      var CarteDep = dc.geoChoroplethChart("#carte");
+      CarteDep.on("preRender", function(chart) {
+        chart.colorDomain(d3.extent(chart.data(),chart.valueAccessor()))
+      })
+      CarteDep.on("preRedraw", function(chart) {
+        chart.colorDomain(d3.extent(chart.data(),chart.valueAccessor()))
+      })
+
+      CarteDep.filterAll()
+
+      /////// For Histograms //////////
+      ll = []
+      entreprise = []
+      categ = []
+      qualite = []
+      spe = []
+      qualif = []
+      year = []
+      avantage = []
+
+      function onlyUnique(value, index, self) {   // find unique array entries
+          return self.indexOf(value) === index;
+          }
+
+
+
+    d3.csv("/data/transp2.csv", function (csv) {
+
+        var monthF = d3.time.format("%b")
+        var dateFormat = d3.time.format("%d/%m/%Y");
+        var timeFormat = d3.time.format("%X");
+        var dteFormat = d3.time.format('%Y-%m-%d');
+
+          // d.month = +d.dd.getMonth(); // pre-calculate month for better performance
+          // d.day = d.dd.getDate();
+
+          csv.forEach(function (d) {
+              d.date = dateFormat.parse(d.avant_date_signature);
+              d.month = d.date.getMonth()
+
+              entreprise.push(d.denomination_sociale)
+              categ.push(d.categorie)
+              qualite.push(d.qualite)
+              spe.push(d.benef_speicalite_libelle)
+              qualif.push(d.benef_qualification)
+              year.push(d.year)
+              avantage.push(d.avant_montant_ttc)
+            });
+
+      var data = crossfilter(csv);
+
+
+      // count all the facts
+      var all = data.groupAll()
+      dc.dataCount(".dc-data-count")
+        .dimension(data)
+        .group(all);
+
+      // ajouter les montants quelque part
+
+
+      /////////////// CarteDep ////////////////////
+
+      Fcol = ["#E2F2FF", "#C4E4FF", "#9ED2FF", "#81C5FF", "#6BBAFF", "#51AEFF", "#36A2FF", "#1E96FF", "#0089FF", "#0061B5"]
+
+
+
+      // read json
+      file = '/data/departements.json'
+      max = 100 // max = d3.max(Area3)
+      min = 0 // min = d3.min(Area3)
+      // xExtent = d3.extent(Area3)
+      var_loc = 'code'
+
+      var WB = data.dimension(dc.pluck('departement'));
+      var areaWB = WB.group().reduceCount(function (d) {
+        return d["avant_montant_ttc"];
+      });
+
+      projection = d3.geo.mercator().center([5.70,46.85]).scale(1720)
+      TT = []
+
+      var width = 960,
+      height = 700;
+
+      d3.json(file, function (lwjson) {
+        var tip = d3.tip()
+        .attr('class', 'd3-tip')
+        .offset([-10, 0])
+
+        ll.push(lwjson.features)
+
+        CarteDep.width(950)
+        .height(700)
+        .dimension(WB)
+        .group(areaWB)
+        .projection(projection)
+        .colors(d3.scale.quantize().range(Fcol))
+        .colorDomain([min, max])
+        .turnOnControls()
+        .colorCalculator(function (d) { return d ? CarteDep.colors()(d) : '#ccc'; })
+        .overlayGeoJson(lwjson.features, "state", function (d) {
+          return d.properties[var_loc];
+        })
+        .title(function (d,i) {TT.push([d.key,d.value]);
+          return "Département: " + d.key + ' '+ d.value
+        })
+        ///////////////////////////  Graph par jour/semaine/mois  /////////////////////////////////////
+
+        var LineChartDay = dc.lineChart("#Graph_par_jour");
+
+        var ByDay = data.dimension(dc.pluck('date'))
+        var ByDayCount = ByDay.group().reduceCount(function (d) {
+                return d["avant_montant_ttc"];
+              });
+
+        // var ByWeek = data.dimension(dc.pluck('week'))
+        // var ByWeekCount = ByWeek.group().reduceCount(function (d) {
+        //         return d["avant_montant_ttc"];
+        //       });
+        //
+        // var ByMonth = data.dimension(dc.pluck('month'))
+        // var ByMonhtCount = ByMonth.group().reduceCount(function (d) {
+        //         return d["avant_montant_ttc"];
+        //       });
+
+        debut = ByDay.bottom(1)[0].date
+        fin = ByDay.top(1)[0].date
+
+        LineChartDay.width(730)
+          .height(400)
+          .transitionDuration(200)
+          .margins({top: 10, right: 10, bottom: 20, left: 25})
+          .dimension(ByDay)
+          .group(ByDayCount)
+          .round(d3.time.day.round)
+          .mouseZoomable(true)
+          .xUnits(d3.time.days)
+          .elasticY(true)
+          .x(d3.time.scale().domain([debut, fin]))
+          .renderHorizontalGridLines(true)
+          .y(d3.scale.linear().domain([100, 500]))
+
+        var Categ = data.dimension(function(d) {return d.categorie;});
+        var CategGrp = Categ.group();
+
+        var Specialites = data.dimension(dc.pluck('benef_speicalite_libelle'))
+        var SpecialitesGrp = Specialites.group().
+          reduceSum(function(d) {return +d.avant_montant_ttc;});
+
+        var pie_chart = dc.pieChart("#pie-chart")
+        pie_chart.width(500).height(200)
+          // .dimension(Categ)
+          // .group(CategGrp)
+          .innerRadius(30)
+          // .width(480).height(300)
+          .dimension(Specialites)
+          .group(SpecialitesGrp)
+          .label(function(d){return d.key + " : "
+              + d.value / 1000  + " milliers d'euros";});
+
+
+        var Entreprise = data.dimension(dc.pluck('denomination_sociale'))
+        var EntrepriseGrp = Entreprise.group().
+          reduceSum(function(d) {return +d.avant_montant_ttc;});
+
+        dc.pieChart("#pie-categ")
+            .width(500).height(200)
+            .dimension(Entreprise)
+            .group(EntrepriseGrp)
+            .innerRadius(10)
+            .label(function(d){
+
+              if (d.value > 1000000){} else {}
+              //   return d.key + " : \n" + d.value / 1000000  + " millions d'euros";
+              // };
+              // else {
+              //   return d.key + " : \n" + d.value / 1000  + " milliers d'euros";
+              // };
+              return d.key + " : \n" + d.value / 1000000  + " millions d'euros";
+                });
+
+        dc.renderAll();
+
+      }) //femer le json
+    });
+
+
+        // Votre joli code D3 viendra se loger ici
+    </script>
+</body>
+</html>
